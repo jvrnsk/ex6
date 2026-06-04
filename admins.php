@@ -39,13 +39,9 @@ if (!$admin || !password_verify($_SERVER['PHP_AUTH_PW'], $admin['password_hash']
 if (isset($_GET['delete'])) {
     $id = (int)$_GET['delete'];
 
-    // сначала удаляем связанные языки
     $db->prepare("DELETE FROM application_languages WHERE application_id=?")->execute([$id]);
-
-    // затем саму анкету
     $db->prepare("DELETE FROM applications WHERE id=?")->execute([$id]);
 
-    // возврат на страницу админки
     header("Location: admin.php");
     exit();
 }
@@ -54,7 +50,6 @@ if (isset($_GET['delete'])) {
 if (isset($_POST['update'])) {
     $id = (int)$_POST['id'];
 
-    // обновление основных полей анкеты
     $stmt = $db->prepare("
         UPDATE applications
         SET fio=?, phone=?, email=?, birthdate=?, gender=?, bio=?
@@ -71,7 +66,23 @@ if (isset($_POST['update'])) {
         $id
     ]);
 
-    // возврат в список анкет
+    $db->prepare("
+        DELETE FROM application_languages
+        WHERE application_id=?
+    ")->execute([$id]);
+
+    if (!empty($_POST['languages'])) {
+
+        $stmt = $db->prepare("
+            INSERT INTO application_languages (application_id, language_id)
+            SELECT ?, id FROM programming_languages WHERE name = ?
+        ");
+
+        foreach ($_POST['languages'] as $lang) {
+            $stmt->execute([$id, $lang]);
+        }
+    }
+
     header("Location: admin.php");
     exit();
 }
@@ -101,7 +112,6 @@ $stats = $db->query("
 
 <h1>admin panel</h1>
 
-<!-- вывод статистики по языкам -->
 <h2>Статистика по языкам</h2>
 <ul>
     <?php foreach ($stats as $s): ?>
@@ -111,13 +121,11 @@ $stats = $db->query("
 
 <hr>
 
-<!-- список всех анкет -->
 <h2>Анкеты пользователей</h2>
 
 <?php foreach ($applications as $app): ?>
 
     <?php
-    // получаем языки текущего пользователя
     $langStmt->execute([$app['id']]);
     $langs = $langStmt->fetchAll(PDO::FETCH_COLUMN);
     ?>
@@ -126,7 +134,6 @@ $stats = $db->query("
 
         <?php if (isset($_GET['edit']) && $_GET['edit'] == $app['id']): ?>
 
-            <!-- форма редактирования анкеты -->
             <form method="POST">
                 <input type="hidden" name="id" value="<?= $app['id'] ?>">
 
@@ -141,6 +148,20 @@ $stats = $db->query("
                     <option value="female" <?= $app['gender']=='female'?'selected':'' ?>>female</option>
                 </select><br>
 
+                <b>языки:</b><br>
+
+                <select name="languages[]" multiple>
+                    <?php
+                    $allLangs = ['Pascal','C','C++','JavaScript','PHP','Python','Java','Haskel','Clojure','Prolog','Scala','Go'];
+
+                    foreach ($allLangs as $lang): ?>
+                        <option value="<?= $lang ?>"
+                            <?= in_array($lang, $langs) ? 'selected' : '' ?>>
+                            <?= $lang ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select><br><br>
+
                 Биография:<br>
                 <textarea name="bio"><?= htmlspecialchars($app['bio']) ?></textarea><br>
 
@@ -149,7 +170,6 @@ $stats = $db->query("
 
         <?php else: ?>
 
-            <!-- просмотр анкеты -->
             <b>#<?= $app['id'] ?> <?= htmlspecialchars($app['fio']) ?></b><br>
             <?= htmlspecialchars($app['email']) ?><br>
             <?= htmlspecialchars($app['phone']) ?><br>
@@ -157,10 +177,8 @@ $stats = $db->query("
             <?= htmlspecialchars($app['gender']) ?><br>
             <i><?= htmlspecialchars($app['bio']) ?></i><br>
 
-            <!-- список языков -->
             <b>языки:</b> <?= implode(', ', $langs) ?><br><br>
 
-            <!-- действия администратора -->
             <a href="admin.php?edit=<?= $app['id'] ?>">Редактировать</a>
             |
             <a href="admin.php?delete=<?= $app['id'] ?>" onclick="return confirm('удалить?')">
@@ -172,3 +190,86 @@ $stats = $db->query("
     </div>
 
 <?php endforeach; ?>
+
+// стиль админки
+<style>
+body {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 15px;
+    background-color: #e6fffa;
+    color: #0f4f4a;
+    font-family: Arial, sans-serif;
+}
+
+h1, h2 {
+    text-align: center;
+    color: #0b5d57;
+}
+
+hr {
+    border: none;
+    height: 1px;
+    background-color: #9adbd3;
+    margin: 20px 0;
+}
+
+div[style*="border:1px solid"] {
+    background-color: #ffffff;
+    border: 1px solid #9adbd3 !important;
+    border-radius: 8px;
+    padding: 15px !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+button {
+    background-color: #1fb6aa;
+    color: white;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+button:hover {
+    background-color: #16968d;
+}
+
+a {
+    color: #0f8b82;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+input, select, textarea {
+    width: 100%;
+    padding: 6px;
+    margin: 4px 0 10px 0;
+    border: 1px solid #9adbd3;
+    border-radius: 5px;
+    box-sizing: border-box;
+    background-color: #f6fffd;
+}
+
+textarea {
+    min-height: 80px;
+}
+
+ul {
+    list-style: none;
+    padding: 0;
+    text-align: center;
+}
+
+ul li {
+    background: #d9f7f4;
+    margin: 5px auto;
+    padding: 6px 10px;
+    border-radius: 6px;
+    display: inline-block;
+}
+</style>
